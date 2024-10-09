@@ -16,3 +16,23 @@
 2. 使用以下命令安装所需库：
    ```bash
    pip install pyautogui pytesseract opencv-python keyboard numpy
+
+基于https://github.com/maile456/QuesionScript修改。
+## 更新了需比较区域坐标框选功能。
+框选功能的实现主要通过鼠标事件和OpenCV来完成，以下是具体步骤：
+## 鼠标回调函数:
+使用 cv2.setMouseCallback 方法设置鼠标事件回调函数 select_region，当鼠标点击时，该函数会被调用。
+当鼠标左键按下 (EVENT_LBUTTONDOWN) 时，记录下起始点的坐标。
+当鼠标左键释放 (EVENT_LBUTTONUP) 时，记录下终点坐标，并绘制一个矩形框来表示所选区域。
+## 选择区域函数:
+在 select_area 函数中，首先截取屏幕截图并转换为OpenCV格式。
+使用 cv2.imshow 显示截图，并调用 select_region 函数来处理鼠标事件。
+等待用户选择完成后，关闭窗口。
+## 功能介绍：坐标保存和加载:
+所选的区域坐标（矩形框的起止坐标）被存储在一个列表中，之后可以将其保存到JSON文件中，方便下次加载。
+1.保存和加载坐标:
+使用 json 库将选定的区域坐标保存到 coordinates.json 文件中。
+在脚本启动时检查该文件是否存在，如果存在，则加载坐标；如果不存在，则进行区域选择。
+2.更新选择区域的流程:
+在首次运行后，用户选择的区域会被保存，以便后续运行直接加载，无需再次框选。
+
