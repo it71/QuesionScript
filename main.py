@@ -4,66 +4,148 @@ import cv2
 import time
 import keyboard
 import numpy as np
+import json
+import os
 
-# 设置 Tesseract OCR 的路径
-pytesseract.pytesseract.tesseract_cmd = r'D:\tesseract-5.4.1\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'D:\tesseract\tesseract.exe'
 
-# 定义屏幕区域的坐标
-first_number_box = (282, 347, 100, 100)  # 第一个数字的区域
-second_number_box = (459, 361, 200, 200)  # 第二个数字的区域
-answer_box_location = (170, 888)  # 答案绘制位置
+sleep_time = 0.3
+boxes = []
+config_file = "coordinates.json"
 
-# 获取指定区域的数字
-def get_number(box):
-    screenshot = pyautogui.screenshot(region=box)  # 截取指定区域的屏幕
-    img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)  # 转换为 BGR 格式
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)  # 转换为灰度图
-    number_text = pytesseract.image_to_string(gray, config='--psm 6')  # 提取文本
-    return number_text.strip()  # 返回提取的数字
+def select_region(event, x, y, flags, param):
+    global boxes
+    if event == cv2.EVENT_LBUTTONDOWN:
+        boxes.append((x, y))
+    elif event == cv2.EVENT_LBUTTONUP:
+        boxes[-1] = boxes[-1] + (x, y)
+        cv2.rectangle(img, boxes[-1][:2], boxes[-1][2:], (0, 255, 0), 2)
+        cv2.imshow("Select Region", img)
 
-# 输入答案
-def input_answer(answer):
-    if answer == ">":
-        draw_greater_than()  # 绘制大于符号
-    elif answer == "<":
-        draw_less_than()  # 绘制小于符号
-    time.sleep(0.1)  # 暂停以确保绘制完成
+def select_area():
+    global img
+    img = np.array(pyautogui.screenshot())
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    cv2.imshow("Select Region", img)
+    cv2.setMouseCallback("Select Region", select_region)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-# 绘制大于符号
-def draw_greater_than():
-    pyautogui.moveTo(170, 888)  # 移动到绘制位置
-    pyautogui.mouseDown()  # 按下鼠标
-    pyautogui.moveTo(250, 950, duration=0)  # 移动到大于符号的尖端位置
-    pyautogui.moveTo(170, 1000, duration=0.2)  # 移动到结束位置
-    pyautogui.mouseUp()  # 放开鼠标
+def get_text(box):
+    try:
+        x1, y1, x2, y2 = box[0], box[1], box[2], box[3]
+        screenshot = pyautogui.screenshot(region=(x1, y1, x2 - x1, y2 - y1))
+        img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        return pytesseract.image_to_string(gray, config='--psm 6').strip()
+    except Exception as e:
+        print(f"Error getting text: {e}")
+        return ""
 
-# 绘制小于符号
-def draw_less_than():
-    pyautogui.moveTo(170, 888)  # 移动到绘制位置
-    pyautogui.mouseDown()  # 按下鼠标
-    pyautogui.moveTo(120, 950, duration=0)  # 移动到小于符号的尖端位置
-    pyautogui.moveTo(170, 1000, duration=0.2)  # 移动到结束位置
-    pyautogui.mouseUp()  # 放开鼠标
+def draw_symbol(symbol: str, target_box: tuple):
+    center_x = (target_box[0] + target_box[2]) // 2
+    center_y = (target_box[1] + target_box[3]) // 2
 
-print("半糖脚本启动！")  # 启动脚本提示
+    pyautogui.moveTo(center_x, center_y)
+    pyautogui.mouseDown()
+
+    if symbol == ">":
+        pyautogui.moveTo(center_x + 10, center_y - 10, duration=0)
+        pyautogui.moveTo(center_x + 20, center_y, duration=0)
+        pyautogui.moveTo(center_x + 10, center_y + 10, duration=0)
+    elif symbol == "<":
+        pyautogui.moveTo(center_x - 10, center_y - 10, duration=0)
+        pyautogui.moveTo(center_x - 20, center_y, duration=0)
+        pyautogui.moveTo(center_x - 10, center_y + 10, duration=0)
+
+    pyautogui.mouseUp()
+
+def save_coordinates(coordinates):
+    with open(config_file, 'w') as f:
+        json.dump(coordinates, f)
+
+def load_coordinates():
+    if os.path.exists(config_file):
+        with open(config_file, 'r') as f:
+            return json.load(f)
+    return None
+
+# 询问用户是否更新框选区域
+update_choice = input("是否要更新框选区域？(y/n): ").strip().lower()
+
+if update_choice == 'y':
+    print("请框选第一个数字区域")
+    select_area()
+    first_number_box = boxes.pop()
+
+    print("请框选第二个数字区域")
+    select_area()
+    second_number_box = boxes.pop()
+
+    print("请框选作答区域")
+    answer_box = boxes.pop()
+
+    print("请框选‘开心收下’区域")
+    select_area()
+    happy_accept_box = boxes.pop()
+
+    save_coordinates({
+        'first': first_number_box,
+        'second': second_number_box,
+        'answer': answer_box,
+        'happy_accept': happy_accept_box
+    })
+else:
+    saved_coordinates = load_coordinates()
+    if saved_coordinates:
+        first_number_box = saved_coordinates['first']
+        second_number_box = saved_coordinates['second']
+        answer_box = saved_coordinates['answer']
+        happy_accept_box = saved_coordinates['happy_accept']
+    else:
+        print("没有找到已保存的坐标，请先运行一次并选择区域。")
+        exit()
+
+print("半糖脚本启动！")
+
+paused = False  # 初始化暂停状态
 while True:
-    if keyboard.is_pressed('q'):  # 检查是否按下退出键
-        print("退出程序")  # 提示退出程序
-        break  # 退出循环
-    num1_text = get_number(first_number_box)  # 获取第一个数字
-    num2_text = get_number(second_number_box)  # 获取第二个数字
+    if keyboard.is_pressed('q'):
+        print("退出程序")
+        break
 
-    # print(f"提取的数字: {num1_text}, {num2_text}")  # 可选：调试输出提取的数字
+    if keyboard.is_pressed('space'):
+        paused = not paused  # 切换暂停状态
+        print("暂停" if paused else "继续")
+        time.sleep(0.5)  # 防止多次触发
 
-    if num1_text.isdigit() and num2_text.isdigit():  # 检查提取的文本是否为数字
-        num1 = int(num1_text)  # 将文本转换为整数
-        num2 = int(num2_text)  # 将文本转换为整数
-        
-        if num1 > num2:
-            answer = ">"  # 如果第一个数字大于第二个，设置答案为大于
-        elif num1 < num2:
-            answer = "<"  # 如果第一个数字小于第二个，设置答案为小于
-        
-        input_answer(answer)  # 输入答案
+    if paused:
+        time.sleep(1)  # 暂停时不进行其他操作
+        continue
 
-    time.sleep(0.3)  # 等待题目刷新
+    num1_text = get_text(first_number_box)
+    num2_text = get_text(second_number_box)
+
+    print(f"提取的数字: {num1_text}, {num2_text}")
+
+    # 检查是否能比较
+    while not (num1_text.isdigit() and num2_text.isdigit()):
+        print("等待有效数字...")
+        time.sleep(1)  # 暂停一段时间
+        num1_text = get_text(first_number_box)
+        num2_text = get_text(second_number_box)
+
+    num1 = int(num1_text)
+    num2 = int(num2_text)
+
+    answer = ">" if num1 > num2 else "<" if num1 < num2 else None
+
+    if answer:
+        draw_symbol(answer, answer_box)
+
+    # 检查是否识别到“开心收下”
+    happy_text = get_text(happy_accept_box)
+    if happy_text == "开心收下":
+        pyautogui.click((happy_accept_box[0] + happy_accept_box[2]) // 2, (happy_accept_box[1] + happy_accept_box[3]) // 2)
+
+    time.sleep(sleep_time)
